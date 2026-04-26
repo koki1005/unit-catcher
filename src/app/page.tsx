@@ -3,8 +3,7 @@
 import { useState, useCallback } from 'react'
 import {
   DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent,
-  MouseSensor, TouchSensor, useSensor, useSensors, useDroppable,
-  closestCenter, ClientRect,
+  MouseSensor, TouchSensor, useSensor, useSensors, useDroppable, ClientRect,
 } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import { Plus, FolderPlus, UserCircle2, Link2, CheckSquare, X, Share2, Trash2 } from 'lucide-react'
@@ -61,28 +60,32 @@ export default function HomePage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } })
   )
 
-  // Folder row = drop into, anywhere else = drop-root
+  // Only match drop-folder-X (pointer over folder) or drop-root
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const { active, droppableContainers, droppableRects, pointerCoordinates } = args
 
-    if (pointerCoordinates) {
-      for (const container of droppableContainers) {
-        const id = String(container.id)
-        if (!id.startsWith('folder-')) continue
-        if (id === String(active.id)) continue
+    if (!pointerCoordinates) return []
 
-        const rect = droppableRects.get(container.id)
-        if (!rect) continue
+    for (const container of droppableContainers) {
+      const id = String(container.id)
+      if (!id.startsWith('drop-folder-')) continue
+      if (id === `drop-folder-${String(active.id).replace('folder-', '')}`) continue
 
-        if (inRect(rect, pointerCoordinates.x, pointerCoordinates.y)) {
-          const folderId = id.replace('folder-', '')
-          const dropContainer = droppableContainers.find(c => c.id === `drop-folder-${folderId}`)
-          if (dropContainer) return [{ id: dropContainer.id, data: dropContainer }]
-        }
+      const rect = droppableRects.get(container.id)
+      if (!rect) continue
+
+      if (inRect(rect, pointerCoordinates.x, pointerCoordinates.y)) {
+        return [{ id: container.id, data: container }]
       }
     }
 
-    return closestCenter(args)
+    const rootContainer = droppableContainers.find(c => String(c.id) === 'drop-root')
+    const rootRect = rootContainer && droppableRects.get(rootContainer.id)
+    if (rootContainer && rootRect && inRect(rootRect, pointerCoordinates.x, pointerCoordinates.y)) {
+      return [{ id: rootContainer.id, data: rootContainer }]
+    }
+
+    return []
   }, [])
 
   const handleDragStart = (e: DragStartEvent) => {
