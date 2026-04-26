@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import {
-  DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent,
+  DndContext, DragEndEvent, DragOverEvent, DragStartEvent,
   MouseSensor, TouchSensor, useSensor, useSensors, useDroppable,
   closestCenter, ClientRect,
 } from '@dnd-kit/core'
@@ -26,17 +26,6 @@ function RootDropZone() {
   )
 }
 
-function DragOverlayItem({ id, folders, urls }: { id: string; folders: Folder[]; urls: UrlItem[] }) {
-  const isFolder = id.startsWith('folder-')
-  const itemId = id.replace(/^(folder|url)-/, '')
-  const label = isFolder ? folders.find(f => f.id === itemId)?.name : urls.find(u => u.id === itemId)?.name
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border shadow-lg text-sm font-medium opacity-90">
-      {isFolder ? '📁' : '🔗'} {label}
-    </div>
-  )
-}
-
 // Returns true if point is within rect
 function inRect(rect: ClientRect, x: number, y: number) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
@@ -53,8 +42,6 @@ export default function HomePage() {
   const [folderOpen, setFolderOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-
   const isEmpty = folders.length === 0 && urls.length === 0
 
   const sensors = useSensors(
@@ -89,8 +76,7 @@ export default function HomePage() {
     return closestCenter(args)
   }, [])
 
-  const handleDragStart = (e: DragStartEvent) => {
-    setDraggingId(String(e.active.id))
+  const handleDragStart = (_e: DragStartEvent) => {
     setPendingDropFolderId(null)
   }
 
@@ -100,7 +86,6 @@ export default function HomePage() {
   }
 
   const handleDragEnd = async (e: DragEndEvent) => {
-    setDraggingId(null)
     setPendingDropFolderId(null)
 
     const { active, over } = e
@@ -336,9 +321,6 @@ export default function HomePage() {
 
         {fabOpen && <div className="fixed inset-0 z-10 bg-black/20" onClick={() => setFabOpen(false)} />}
 
-        <DragOverlay>
-          {draggingId && <DragOverlayItem id={draggingId} folders={folders} urls={urls} />}
-        </DragOverlay>
       </div>
 
       <AddSheet open={addOpen} onClose={() => setAddOpen(false)} />

@@ -47,8 +47,7 @@ function SortableUrl({ item }: { item: UrlItem }) {
     disabled: selectMode,
   })
 
-  // Don't move original element — DragOverlay handles cursor following
-  const style = isDragging ? {} : { transform: CSS.Transform.toString(transform), transition }
+  const style = { transform: CSS.Transform.toString(transform), transition }
 
   const handleDelete = async () => {
     if (!confirm(`「${item.name}」を削除しますか？`)) return
@@ -131,7 +130,7 @@ function SortableFolder({ folder, depth }: { folder: FolderType; depth: number }
     data: { type: 'folder', id: folder.id },
   })
 
-  const style = isDragging ? {} : { transform: CSS.Transform.toString(transform), transition }
+  const style = { transform: CSS.Transform.toString(transform), transition }
   const isPendingDrop = pendingDropFolderId === folder.id
 
   const handleDelete = async () => {
