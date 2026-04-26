@@ -80,3 +80,35 @@ export function renameUrl(id: string, name: string): void {
   const urls = getUrls().map(u => (u.id === id ? { ...u, name } : u))
   localStorage.setItem(URLS_KEY, JSON.stringify(urls))
 }
+
+export function moveUrl(id: string, folder_id: string | null): void {
+  const urls = getUrls().map(u => (u.id === id ? { ...u, folder_id } : u))
+  localStorage.setItem(URLS_KEY, JSON.stringify(urls))
+}
+
+export function moveFolder(id: string, parent_id: string | null): void {
+  const folders = getFolders().map(f => (f.id === id ? { ...f, parent_id } : f))
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
+}
+
+export function deleteUrls(ids: string[]): void {
+  const set = new Set(ids)
+  const urls = getUrls().filter(u => !set.has(u.id))
+  localStorage.setItem(URLS_KEY, JSON.stringify(urls))
+}
+
+export function deleteFolders(ids: string[]): void {
+  const allFolders = getFolders()
+  const toDelete = new Set<string>()
+  for (const id of ids) {
+    const queue = [id]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      toDelete.add(current)
+      allFolders.filter(f => f.parent_id === current).forEach(f => queue.push(f.id))
+    }
+  }
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders.filter(f => !toDelete.has(f.id))))
+  const urls = getUrls().filter(u => !toDelete.has(u.folder_id ?? ''))
+  localStorage.setItem(URLS_KEY, JSON.stringify(urls))
+}

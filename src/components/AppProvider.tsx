@@ -12,6 +12,8 @@ export default function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
   const [folders, setFolders] = useState<Folder[]>([])
   const [urls, setUrls] = useState<UrlItem[]>([])
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const loadData = useCallback(async (u: User | null) => {
     if (u) {
@@ -46,8 +48,26 @@ export default function AppProvider({ children }: { children: ReactNode }) {
     loadData(u)
   }, [loadData])
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }, [])
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    setSelectMode(false)
+  }, [])
+
   return (
-    <AppContext.Provider value={{ user, setUser, folders, urls, setFolders, setUrls, reload: () => loadData(user) }}>
+    <AppContext.Provider value={{
+      user, setUser, folders, urls, setFolders, setUrls,
+      reload: () => loadData(user),
+      selectMode, setSelectMode,
+      selectedIds, toggleSelect, clearSelection,
+    }}>
       {children}
     </AppContext.Provider>
   )

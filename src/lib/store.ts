@@ -11,6 +11,12 @@ export type AppContextType = {
   setFolders: (f: Folder[]) => void
   setUrls: (u: UrlItem[]) => void
   reload: () => void
+  // select mode
+  selectMode: boolean
+  setSelectMode: (v: boolean) => void
+  selectedIds: Set<string>
+  toggleSelect: (id: string) => void
+  clearSelection: () => void
 }
 
 export const AppContext = createContext<AppContextType>({
@@ -21,6 +27,11 @@ export const AppContext = createContext<AppContextType>({
   setFolders: () => {},
   setUrls: () => {},
   reload: () => {},
+  selectMode: false,
+  setSelectMode: () => {},
+  selectedIds: new Set(),
+  toggleSelect: () => {},
+  clearSelection: () => {},
 })
 
 export function useApp() {

@@ -103,3 +103,35 @@ export async function renameUrlRemote(id: string, name: string): Promise<void> {
   const supabase = getSupabase()
   await supabase.from('urls').update({ name }).eq('id', id)
 }
+
+export async function moveUrlRemote(id: string, folder_id: string | null): Promise<void> {
+  const supabase = getSupabase()
+  await supabase.from('urls').update({ folder_id }).eq('id', id)
+}
+
+export async function moveFolderRemote(id: string, parent_id: string | null): Promise<void> {
+  const supabase = getSupabase()
+  await supabase.from('folders').update({ parent_id }).eq('id', id)
+}
+
+export async function deleteUrlsRemote(ids: string[]): Promise<void> {
+  const supabase = getSupabase()
+  await supabase.from('urls').delete().in('id', ids)
+}
+
+export async function deleteFoldersRemote(ids: string[], allFolders: Folder[]): Promise<void> {
+  const supabase = getSupabase()
+  const toDelete = new Set<string>()
+  for (const id of ids) {
+    const queue = [id]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      toDelete.add(current)
+      allFolders.filter(f => f.parent_id === current).forEach(f => queue.push(f.id))
+    }
+  }
+  for (const fid of Array.from(toDelete)) {
+    await supabase.from('urls').delete().eq('folder_id', fid)
+    await supabase.from('folders').delete().eq('id', fid)
+  }
+}

@@ -1,99 +1,266 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, FolderPlus, UserCircle2, Link2 } from 'lucide-react'
+import {
+  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
+  MouseSensor, TouchSensor, useSensor, useSensors, useDroppable,
+} from '@dnd-kit/core'
+import { Plus, FolderPlus, UserCircle2, Link2, CheckSquare, X, Share2, Trash2 } from 'lucide-react'
 import FolderTree from '@/components/FolderTree'
 import AddSheet from '@/components/AddSheet'
 import CreateFolderDialog from '@/components/CreateFolderDialog'
 import AccountSheet from '@/components/AccountSheet'
 import { useApp } from '@/lib/store'
+import { moveUrl, moveFolder, getFolders, getUrls, deleteUrls, deleteFolders } from '@/lib/storage'
+import { moveUrlRemote, moveFolderRemote, deleteUrlsRemote, deleteFoldersRemote } from '@/lib/supabase-storage'
+import { Button } from '@/components/ui/button'
+import { Folder, UrlItem } from '@/lib/types'
+
+// Root droppable zone
+function RootDropZone() {
+  const { setNodeRef, isOver } = useDroppable({ id: 'drop-root', data: { type: 'root' } })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-h-[60px] rounded-lg transition-colors ${isOver ? 'bg-primary/10 ring-2 ring-primary/30' : ''}`}
+    />
+  )
+}
+
+// Drag overlay item label
+function DragOverlayItem({ id, folders, urls }: { id: string; folders: Folder[]; urls: UrlItem[] }) {
+  const isFolder = id.startsWith('folder-')
+  const itemId = id.replace(/^(folder|url)-/, '')
+  const label = isFolder
+    ? folders.find(f => f.id === itemId)?.name
+    : urls.find(u => u.id === itemId)?.name
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border shadow-lg text-sm font-medium opacity-90">
+      {isFolder ? '📁' : '🔗'} {label}
+    </div>
+  )
+}
 
 export default function HomePage() {
-  const { user, folders, urls } = useApp()
+  const { user, folders, urls, setFolders, setUrls, reload, selectMode, setSelectMode, selectedIds, clearSelection } = useApp()
   const [addOpen, setAddOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const isEmpty = folders.length === 0 && urls.length === 0
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Link2 className="w-5 h-5 text-primary" />
-          <h1 className="font-bold text-lg tracking-tight">Unit Catcher</h1>
-        </div>
-        <button
-          onClick={() => setAccountOpen(true)}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <UserCircle2 className="w-5 h-5" />
-          <span className="max-w-[120px] truncate">
-            {user ? user.account_name : 'ゲスト'}
-          </span>
-        </button>
-      </header>
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } })
+  )
 
-      {/* Content */}
-      <main className="flex-1 px-4 py-4">
-        {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-              <Link2 className="w-8 h-8 text-muted-foreground" />
+  const handleDragStart = (e: DragStartEvent) => {
+    setDraggingId(String(e.active.id))
+  }
+
+  const handleDragEnd = async (e: DragEndEvent) => {
+    setDraggingId(null)
+    const { active, over } = e
+    if (!over) return
+
+    const activeData = active.data.current as { type: string; id: string }
+    const overData = over.data.current as { type: string; id: string } | undefined
+
+    const targetFolderId = over.id === 'drop-root'
+      ? null
+      : overData?.id ?? null
+
+    // Prevent dropping folder into itself or descendant
+    if (activeData.type === 'folder' && targetFolderId) {
+      const isDescendant = (folderId: string, targetId: string): boolean => {
+        if (folderId === targetId) return true
+        return folders.filter(f => f.parent_id === folderId).some(f => isDescendant(f.id, targetId))
+      }
+      if (isDescendant(activeData.id, targetFolderId)) return
+    }
+
+    if (activeData.type === 'url') {
+      const url = urls.find(u => u.id === activeData.id)
+      if (!url || url.folder_id === targetFolderId) return
+      if (user) { await moveUrlRemote(activeData.id, targetFolderId); reload() }
+      else { moveUrl(activeData.id, targetFolderId); setUrls(getUrls()) }
+    } else if (activeData.type === 'folder') {
+      const folder = folders.find(f => f.id === activeData.id)
+      if (!folder || folder.parent_id === targetFolderId) return
+      if (user) { await moveFolderRemote(activeData.id, targetFolderId); reload() }
+      else { moveFolder(activeData.id, targetFolderId); setFolders(getFolders()) }
+    }
+  }
+
+  // Collect all URLs in selected folders recursively
+  const collectUrlsFromFolders = (folderIds: string[]): string[] => {
+    const result: string[] = []
+    const queue = [...folderIds]
+    const visited = new Set<string>()
+    while (queue.length > 0) {
+      const fid = queue.shift()!
+      if (visited.has(fid)) continue
+      visited.add(fid)
+      urls.filter(u => u.folder_id === fid).forEach(u => result.push(u.id))
+      folders.filter(f => f.parent_id === fid).forEach(f => queue.push(f.id))
+    }
+    return result
+  }
+
+  const handleShare = async () => {
+    const selectedArr = Array.from(selectedIds)
+    const urlIds = selectedArr.filter(id => urls.some(u => u.id === id))
+    const folderIds = selectedArr.filter(id => folders.some(f => f.id === id))
+    const extraUrlIds = collectUrlsFromFolders(folderIds)
+    const allUrlIds = Array.from(new Set([...urlIds, ...extraUrlIds]))
+    const items = allUrlIds.map(id => urls.find(u => u.id === id)).filter(Boolean) as typeof urls
+    const text = items.map(u => `${u.name}\n${u.url}`).join('\n\n')
+    if (navigator.share) {
+      await navigator.share({ title: 'Unit Catcher', text })
+    } else {
+      await navigator.clipboard.writeText(text)
+      alert('クリップボードにコピーしました')
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (!confirm('選択したアイテムを削除しますか？')) return
+    const selectedArr = Array.from(selectedIds)
+    const urlIds = selectedArr.filter(id => urls.some(u => u.id === id))
+    const folderIds = selectedArr.filter(id => folders.some(f => f.id === id))
+    if (user) {
+      if (urlIds.length) await deleteUrlsRemote(urlIds)
+      if (folderIds.length) await deleteFoldersRemote(folderIds, folders)
+      reload()
+    } else {
+      if (urlIds.length) deleteUrls(urlIds)
+      if (folderIds.length) deleteFolders(folderIds)
+      setFolders(getFolders())
+      setUrls(getUrls())
+    }
+    clearSelection()
+  }
+
+  return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
+        {/* Header */}
+        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Link2 className="w-5 h-5 text-primary" />
+            <h1 className="font-bold text-lg tracking-tight">Unit Catcher</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isEmpty && (
+              <button
+                onClick={() => { setSelectMode(!selectMode); if (selectMode) clearSelection() }}
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${selectMode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                選択
+              </button>
+            )}
+            <button
+              onClick={() => setAccountOpen(true)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <UserCircle2 className="w-5 h-5" />
+              <span className="max-w-[100px] truncate">
+                {user ? user.account_name : 'ゲスト'}
+              </span>
+            </button>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className="flex-1 px-4 py-4 pb-28">
+          {isEmpty ? (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+                <Link2 className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-lg">URLがまだありません</p>
+                <p className="text-sm text-muted-foreground mt-1">右下の ＋ ボタンから追加してください</p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-lg">URLがまだありません</p>
-              <p className="text-sm text-muted-foreground mt-1">右下の ＋ ボタンから追加してください</p>
+          ) : (
+            <>
+              <FolderTree parentId={null} />
+              <RootDropZone />
+            </>
+          )}
+        </main>
+
+        {/* Select mode action bar */}
+        {selectMode && (
+          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg z-30 bg-background border-t border-border px-4 py-3 flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">{selectedIds.size}件選択中</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleShare} disabled={selectedIds.size === 0}>
+                <Share2 className="w-4 h-4 mr-1" />
+                共有
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={selectedIds.size === 0}>
+                <Trash2 className="w-4 h-4 mr-1" />
+                削除
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
+                <X className="w-4 h-4" />
+              </Button>
             </div>
           </div>
-        ) : (
-          <FolderTree parentId={null} />
         )}
-      </main>
 
-      {/* FAB */}
-      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-2 z-20">
+        {/* FAB */}
+        {!selectMode && (
+          <div className="fixed bottom-6 right-6 flex flex-col items-end gap-2 z-20">
+            {fabOpen && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-foreground text-background rounded-full px-2.5 py-1 font-medium shadow">フォルダを作成</span>
+                  <button
+                    onClick={() => { setFolderOpen(true); setFabOpen(false) }}
+                    className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border"
+                  >
+                    <FolderPlus className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-foreground text-background rounded-full px-2.5 py-1 font-medium shadow">URLを追加</span>
+                  <button
+                    onClick={() => { setAddOpen(true); setFabOpen(false) }}
+                    className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border"
+                  >
+                    <Link2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </>
+            )}
+            <button
+              onClick={() => setFabOpen(prev => !prev)}
+              className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:opacity-90 transition-all"
+              style={{ transform: fabOpen ? 'rotate(45deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+            >
+              <Plus className="w-6 h-6" />
+            </button>
+          </div>
+        )}
+
         {fabOpen && (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="text-xs bg-foreground text-background rounded-full px-2.5 py-1 font-medium shadow">フォルダを作成</span>
-              <button
-                onClick={() => { setFolderOpen(true); setFabOpen(false) }}
-                className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border"
-              >
-                <FolderPlus className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs bg-foreground text-background rounded-full px-2.5 py-1 font-medium shadow">URLを追加</span>
-              <button
-                onClick={() => { setAddOpen(true); setFabOpen(false) }}
-                className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border"
-              >
-                <Link2 className="w-5 h-5" />
-              </button>
-            </div>
-          </>
+          <div className="fixed inset-0 z-10 bg-black/20" onClick={() => setFabOpen(false)} />
         )}
-        <button
-          onClick={() => setFabOpen(prev => !prev)}
-          className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:opacity-90 transition-all"
-          style={{ transform: fabOpen ? 'rotate(45deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
-        >
-          <Plus className="w-6 h-6" />
-        </button>
-      </div>
 
-      {/* Overlay when FAB open */}
-      {fabOpen && (
-        <div className="fixed inset-0 z-10 bg-black/20" onClick={() => setFabOpen(false)} />
-      )}
+        <DragOverlay>
+          {draggingId && <DragOverlayItem id={draggingId} folders={folders} urls={urls} />}
+        </DragOverlay>
+      </div>
 
       <AddSheet open={addOpen} onClose={() => setAddOpen(false)} />
       <CreateFolderDialog open={folderOpen} onClose={() => setFolderOpen(false)} />
       <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} />
-    </div>
+    </DndContext>
   )
 }
