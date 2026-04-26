@@ -3,6 +3,7 @@ export type Folder = {
   user_id: string | null
   name: string
   parent_id: string | null
+  position: number | null
   created_at: string
 }
 
@@ -12,6 +13,7 @@ export type UrlItem = {
   folder_id: string | null
   name: string
   url: string
+  position: number | null
   created_at: string
 }
 
@@ -21,6 +23,6 @@ export type User = {
   created_at: string
 }
 
-export type TreeNode =
-  | { type: 'folder'; data: Folder; children: TreeNode[] }
-  | { type: 'url'; data: UrlItem }
+export type SortableItem =
+  | { type: 'folder'; item: Folder; sortId: string; pos: number }
+  | { type: 'url'; item: UrlItem; sortId: string; pos: number }

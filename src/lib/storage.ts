@@ -16,11 +16,15 @@ export function getFolders(): Folder[] {
 
 export function saveFolder(name: string, parent_id: string | null = null): Folder {
   const folders = getFolders()
+  const maxPos = folders
+    .filter(f => f.parent_id === parent_id)
+    .reduce((m, f) => Math.max(m, f.position ?? -1), -1)
   const folder: Folder = {
     id: generateId(),
     user_id: null,
     name,
     parent_id,
+    position: maxPos + 1,
     created_at: new Date().toISOString(),
   }
   folders.push(folder)
@@ -58,12 +62,16 @@ export function getUrls(): UrlItem[] {
 
 export function saveUrl(name: string, url: string, folder_id: string | null = null): UrlItem {
   const urls = getUrls()
+  const maxPos = urls
+    .filter(u => u.folder_id === folder_id)
+    .reduce((m, u) => Math.max(m, u.position ?? -1), -1)
   const item: UrlItem = {
     id: generateId(),
     user_id: null,
     folder_id,
     name,
     url,
+    position: maxPos + 1,
     created_at: new Date().toISOString(),
   }
   urls.push(item)
@@ -110,5 +118,17 @@ export function deleteFolders(ids: string[]): void {
   }
   localStorage.setItem(FOLDERS_KEY, JSON.stringify(allFolders.filter(f => !toDelete.has(f.id))))
   const urls = getUrls().filter(u => !toDelete.has(u.folder_id ?? ''))
+  localStorage.setItem(URLS_KEY, JSON.stringify(urls))
+}
+
+export function reorderItems(
+  folderUpdates: Array<{ id: string; position: number }>,
+  urlUpdates: Array<{ id: string; position: number }>
+): void {
+  const fMap = new Map(folderUpdates.map(u => [u.id, u.position]))
+  const uMap = new Map(urlUpdates.map(u => [u.id, u.position]))
+  const folders = getFolders().map(f => fMap.has(f.id) ? { ...f, position: fMap.get(f.id)! } : f)
+  const urls = getUrls().map(u => uMap.has(u.id) ? { ...u, position: uMap.get(u.id)! } : u)
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
   localStorage.setItem(URLS_KEY, JSON.stringify(urls))
 }

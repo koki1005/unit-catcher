@@ -1,39 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import {
-  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
-  MouseSensor, TouchSensor, useSensor, useSensors, useDroppable,
+  DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent,
+  MouseSensor, TouchSensor, useSensor, useSensors, useDroppable, closestCenter,
 } from '@dnd-kit/core'
+import { arrayMove } from '@dnd-kit/sortable'
 import { Plus, FolderPlus, UserCircle2, Link2, CheckSquare, X, Share2, Trash2 } from 'lucide-react'
-import FolderTree from '@/components/FolderTree'
+import FolderTree, { buildSortedItems } from '@/components/FolderTree'
 import AddSheet from '@/components/AddSheet'
 import CreateFolderDialog from '@/components/CreateFolderDialog'
 import AccountSheet from '@/components/AccountSheet'
-import { useApp } from '@/lib/store'
-import { moveUrl, moveFolder, getFolders, getUrls, deleteUrls, deleteFolders } from '@/lib/storage'
-import { moveUrlRemote, moveFolderRemote, deleteUrlsRemote, deleteFoldersRemote } from '@/lib/supabase-storage'
 import { Button } from '@/components/ui/button'
+import { useApp } from '@/lib/store'
+import { moveUrl, moveFolder, getFolders, getUrls, deleteUrls, deleteFolders, reorderItems } from '@/lib/storage'
+import { moveUrlRemote, moveFolderRemote, deleteUrlsRemote, deleteFoldersRemote, reorderItemsRemote } from '@/lib/supabase-storage'
 import { Folder, UrlItem } from '@/lib/types'
 
-// Root droppable zone
 function RootDropZone() {
   const { setNodeRef, isOver } = useDroppable({ id: 'drop-root', data: { type: 'root' } })
   return (
-    <div
-      ref={setNodeRef}
-      className={`min-h-[60px] rounded-lg transition-colors ${isOver ? 'bg-primary/10 ring-2 ring-primary/30' : ''}`}
-    />
+    <div ref={setNodeRef} className={`min-h-[60px] rounded-lg mt-1 transition-colors ${isOver ? 'bg-primary/10 ring-2 ring-primary/30' : ''}`} />
   )
 }
 
-// Drag overlay item label
 function DragOverlayItem({ id, folders, urls }: { id: string; folders: Folder[]; urls: UrlItem[] }) {
   const isFolder = id.startsWith('folder-')
   const itemId = id.replace(/^(folder|url)-/, '')
-  const label = isFolder
-    ? folders.find(f => f.id === itemId)?.name
-    : urls.find(u => u.id === itemId)?.name
+  const label = isFolder ? folders.find(f => f.id === itemId)?.name : urls.find(u => u.id === itemId)?.name
   return (
     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border shadow-lg text-sm font-medium opacity-90">
       {isFolder ? '📁' : '🔗'} {label}
@@ -42,12 +36,27 @@ function DragOverlayItem({ id, folders, urls }: { id: string; folders: Folder[];
 }
 
 export default function HomePage() {
-  const { user, folders, urls, setFolders, setUrls, reload, selectMode, setSelectMode, selectedIds, clearSelection } = useApp()
+  const {
+    user, folders, urls, setFolders, setUrls, reload,
+    selectMode, setSelectMode, selectedIds, clearSelection,
+    setPendingDropFolderId,
+  } = useApp()
+
   const [addOpen, setAddOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+
+  const folderHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDropRef = useRef<string | null>(null)
+
+  const clearHoverTimer = useCallback(() => {
+    if (folderHoverTimer.current) {
+      clearTimeout(folderHoverTimer.current)
+      folderHoverTimer.current = null
+    }
+  }, [])
 
   const isEmpty = folders.length === 0 && urls.length === 0
 
@@ -58,39 +67,119 @@ export default function HomePage() {
 
   const handleDragStart = (e: DragStartEvent) => {
     setDraggingId(String(e.active.id))
+    clearHoverTimer()
+    pendingDropRef.current = null
+    setPendingDropFolderId(null)
+  }
+
+  const handleDragOver = (e: DragOverEvent) => {
+    const overId = String(e.over?.id ?? '')
+    const activeData = e.active.data.current as { type: string; id: string } | undefined
+
+    if (overId.startsWith('folder-')) {
+      const folderId = overId.replace('folder-', '')
+      // Don't allow dropping a folder into itself
+      if (activeData?.type === 'folder' && activeData.id === folderId) return
+      if (pendingDropRef.current !== folderId) {
+        clearHoverTimer()
+        pendingDropRef.current = null
+        setPendingDropFolderId(null)
+        folderHoverTimer.current = setTimeout(() => {
+          pendingDropRef.current = folderId
+          setPendingDropFolderId(folderId)
+        }, 600)
+      }
+    } else {
+      clearHoverTimer()
+      if (pendingDropRef.current) {
+        pendingDropRef.current = null
+        setPendingDropFolderId(null)
+      }
+    }
   }
 
   const handleDragEnd = async (e: DragEndEvent) => {
+    clearHoverTimer()
     setDraggingId(null)
     const { active, over } = e
+    const pendingFolderId = pendingDropRef.current
+    pendingDropRef.current = null
+    setPendingDropFolderId(null)
+
     if (!over) return
 
     const activeData = active.data.current as { type: string; id: string }
-    const overData = over.data.current as { type: string; id: string } | undefined
 
-    const targetFolderId = over.id === 'drop-root'
-      ? null
-      : overData?.id ?? null
-
-    // Prevent dropping folder into itself or descendant
-    if (activeData.type === 'folder' && targetFolderId) {
-      const isDescendant = (folderId: string, targetId: string): boolean => {
-        if (folderId === targetId) return true
-        return folders.filter(f => f.parent_id === folderId).some(f => isDescendant(f.id, targetId))
+    // --- Case 1: Hover-drop INTO folder ---
+    if (pendingFolderId) {
+      const isDescendant = (checkId: string, targetId: string): boolean => {
+        if (checkId === targetId) return true
+        return folders.filter(f => f.parent_id === checkId).some(f => isDescendant(f.id, targetId))
       }
-      if (isDescendant(activeData.id, targetFolderId)) return
+      if (activeData.type === 'url') {
+        const url = urls.find(u => u.id === activeData.id)
+        if (!url || url.folder_id === pendingFolderId) return
+        if (user) { await moveUrlRemote(activeData.id, pendingFolderId); reload() }
+        else { moveUrl(activeData.id, pendingFolderId); setUrls(getUrls()) }
+      } else {
+        if (isDescendant(activeData.id, pendingFolderId)) return
+        const folder = folders.find(f => f.id === activeData.id)
+        if (!folder || folder.parent_id === pendingFolderId) return
+        if (user) { await moveFolderRemote(activeData.id, pendingFolderId); reload() }
+        else { moveFolder(activeData.id, pendingFolderId); setFolders(getFolders()) }
+      }
+      return
     }
 
-    if (activeData.type === 'url') {
-      const url = urls.find(u => u.id === activeData.id)
-      if (!url || url.folder_id === targetFolderId) return
-      if (user) { await moveUrlRemote(activeData.id, targetFolderId); reload() }
-      else { moveUrl(activeData.id, targetFolderId); setUrls(getUrls()) }
-    } else if (activeData.type === 'folder') {
-      const folder = folders.find(f => f.id === activeData.id)
-      if (!folder || folder.parent_id === targetFolderId) return
-      if (user) { await moveFolderRemote(activeData.id, targetFolderId); reload() }
-      else { moveFolder(activeData.id, targetFolderId); setFolders(getFolders()) }
+    // --- Case 2: Drop on root zone ---
+    if (String(over.id) === 'drop-root') {
+      if (activeData.type === 'url') {
+        const url = urls.find(u => u.id === activeData.id)
+        if (!url || url.folder_id === null) return
+        if (user) { await moveUrlRemote(activeData.id, null); reload() }
+        else { moveUrl(activeData.id, null); setUrls(getUrls()) }
+      } else {
+        const folder = folders.find(f => f.id === activeData.id)
+        if (!folder || folder.parent_id === null) return
+        if (user) { await moveFolderRemote(activeData.id, null); reload() }
+        else { moveFolder(activeData.id, null); setFolders(getFolders()) }
+      }
+      return
+    }
+
+    // --- Case 3: Reorder ---
+    if (active.id === over.id) return
+
+    // Find active item's parent level
+    const activeItem = activeData.type === 'url'
+      ? urls.find(u => u.id === activeData.id)
+      : folders.find(f => f.id === activeData.id)
+    if (!activeItem) return
+
+    const parentId = activeData.type === 'url'
+      ? (activeItem as UrlItem).folder_id
+      : (activeItem as Folder).parent_id
+
+    const levelItems = buildSortedItems(folders, urls, parentId)
+    const oldIndex = levelItems.findIndex(i => i.sortId === String(active.id))
+    const newIndex = levelItems.findIndex(i => i.sortId === String(over.id))
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+
+    const reordered = arrayMove(levelItems, oldIndex, newIndex)
+    const folderUpdates = reordered
+      .filter(i => i.type === 'folder')
+      .map((i, _idx) => ({ id: i.item.id, position: reordered.indexOf(i) }))
+    const urlUpdates = reordered
+      .filter(i => i.type === 'url')
+      .map((i, _idx) => ({ id: i.item.id, position: reordered.indexOf(i) }))
+
+    if (user) {
+      await reorderItemsRemote(folderUpdates, urlUpdates)
+      reload()
+    } else {
+      reorderItems(folderUpdates, urlUpdates)
+      setFolders(getFolders())
+      setUrls(getUrls())
     }
   }
 
@@ -115,7 +204,7 @@ export default function HomePage() {
     const folderIds = selectedArr.filter(id => folders.some(f => f.id === id))
     const extraUrlIds = collectUrlsFromFolders(folderIds)
     const allUrlIds = Array.from(new Set([...urlIds, ...extraUrlIds]))
-    const items = allUrlIds.map(id => urls.find(u => u.id === id)).filter(Boolean) as typeof urls
+    const items = allUrlIds.map(id => urls.find(u => u.id === id)).filter(Boolean) as UrlItem[]
     const text = items.map(u => `${u.name}\n${u.url}`).join('\n\n')
     if (navigator.share) {
       await navigator.share({ title: 'Unit Catcher', text })
@@ -144,7 +233,13 @@ export default function HomePage() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
       <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
         {/* Header */}
         <header className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border px-4 py-3 flex items-center justify-between">
@@ -167,9 +262,7 @@ export default function HomePage() {
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <UserCircle2 className="w-5 h-5" />
-              <span className="max-w-[100px] truncate">
-                {user ? user.account_name : 'ゲスト'}
-              </span>
+              <span className="max-w-[100px] truncate">{user ? user.account_name : 'ゲスト'}</span>
             </button>
           </div>
         </header>
@@ -200,12 +293,10 @@ export default function HomePage() {
             <span className="text-sm text-muted-foreground">{selectedIds.size}件選択中</span>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handleShare} disabled={selectedIds.size === 0}>
-                <Share2 className="w-4 h-4 mr-1" />
-                共有
+                <Share2 className="w-4 h-4 mr-1" />共有
               </Button>
               <Button variant="destructive" size="sm" onClick={handleDeleteSelected} disabled={selectedIds.size === 0}>
-                <Trash2 className="w-4 h-4 mr-1" />
-                削除
+                <Trash2 className="w-4 h-4 mr-1" />削除
               </Button>
               <Button variant="ghost" size="sm" onClick={clearSelection}>
                 <X className="w-4 h-4" />
@@ -221,19 +312,13 @@ export default function HomePage() {
               <>
                 <div className="flex items-center gap-2">
                   <span className="text-xs bg-foreground text-background rounded-full px-2.5 py-1 font-medium shadow">フォルダを作成</span>
-                  <button
-                    onClick={() => { setFolderOpen(true); setFabOpen(false) }}
-                    className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border"
-                  >
+                  <button onClick={() => { setFolderOpen(true); setFabOpen(false) }} className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border">
                     <FolderPlus className="w-5 h-5" />
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs bg-foreground text-background rounded-full px-2.5 py-1 font-medium shadow">URLを追加</span>
-                  <button
-                    onClick={() => { setAddOpen(true); setFabOpen(false) }}
-                    className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border"
-                  >
+                  <button onClick={() => { setAddOpen(true); setFabOpen(false) }} className="w-12 h-12 rounded-full bg-muted shadow-lg flex items-center justify-center hover:bg-muted/80 transition-colors border border-border">
                     <Link2 className="w-5 h-5" />
                   </button>
                 </div>
@@ -249,9 +334,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {fabOpen && (
-          <div className="fixed inset-0 z-10 bg-black/20" onClick={() => setFabOpen(false)} />
-        )}
+        {fabOpen && <div className="fixed inset-0 z-10 bg-black/20" onClick={() => setFabOpen(false)} />}
 
         <DragOverlay>
           {draggingId && <DragOverlayItem id={draggingId} folders={folders} urls={urls} />}

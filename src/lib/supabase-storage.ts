@@ -34,7 +34,7 @@ export async function loginUser(account_name: string): Promise<{ user: User | nu
 // Folders
 export async function getFoldersRemote(user_id: string): Promise<Folder[]> {
   const supabase = getSupabase()
-  const { data } = await supabase.from('folders').select('*').eq('user_id', user_id)
+  const { data } = await supabase.from('folders').select('*').eq('user_id', user_id).order('position', { ascending: true, nullsFirst: false })
   return data ?? []
 }
 
@@ -75,7 +75,7 @@ export async function deleteFolderRemote(id: string, allFolders: Folder[]): Prom
 // URLs
 export async function getUrlsRemote(user_id: string): Promise<UrlItem[]> {
   const supabase = getSupabase()
-  const { data } = await supabase.from('urls').select('*').eq('user_id', user_id)
+  const { data } = await supabase.from('urls').select('*').eq('user_id', user_id).order('position', { ascending: true, nullsFirst: false })
   return data ?? []
 }
 
@@ -117,6 +117,17 @@ export async function moveFolderRemote(id: string, parent_id: string | null): Pr
 export async function deleteUrlsRemote(ids: string[]): Promise<void> {
   const supabase = getSupabase()
   await supabase.from('urls').delete().in('id', ids)
+}
+
+export async function reorderItemsRemote(
+  folderUpdates: Array<{ id: string; position: number }>,
+  urlUpdates: Array<{ id: string; position: number }>
+): Promise<void> {
+  const supabase = getSupabase()
+  await Promise.all([
+    ...folderUpdates.map(({ id, position }) => supabase.from('folders').update({ position }).eq('id', id)),
+    ...urlUpdates.map(({ id, position }) => supabase.from('urls').update({ position }).eq('id', id)),
+  ])
 }
 
 export async function deleteFoldersRemote(ids: string[], allFolders: Folder[]): Promise<void> {
