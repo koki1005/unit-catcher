@@ -210,7 +210,8 @@ export default function HomePage() {
     const items = allUrlIds.map(id => urls.find(u => u.id === id)).filter(Boolean) as UrlItem[]
     const text = items.map(u => `${u.name}\n${u.url}`).join('\n\n')
     if (navigator.share) {
-      await navigator.share({ title: 'Unit Catcher', text })
+      try { await navigator.share({ title: 'Unit Catcher', text }) } catch {}
+      return
     } else {
       await navigator.clipboard.writeText(text)
       alert('クリップボードにコピーしました')

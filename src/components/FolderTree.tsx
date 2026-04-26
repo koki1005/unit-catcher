@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 async function shareItems(items: UrlItem[]) {
   const text = items.map(u => `${u.name}\n${u.url}`).join('\n\n')
   if (navigator.share) {
-    await navigator.share({ title: 'Unit Catcher', text })
+    try { await navigator.share({ title: 'Unit Catcher', text }) } catch {}
   } else {
     await navigator.clipboard.writeText(text)
     alert('クリップボードにコピーしました')
