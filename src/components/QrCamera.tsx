@@ -10,8 +10,13 @@ type Props = {
 export default function QrCamera({ onDetected }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const scannerRef = useRef<Html5Qrcode | null>(null)
+  const isStartedRef = useRef(false)
+  const onDetectedRef = useRef(onDetected)
   const [error, setError] = useState<string | null>(null)
-  const [started, setStarted] = useState(false)
+
+  useEffect(() => {
+    onDetectedRef.current = onDetected
+  }, [onDetected])
 
   useEffect(() => {
     const id = 'qr-reader-' + Math.random().toString(36).slice(2)
@@ -25,17 +30,25 @@ export default function QrCamera({ onDetected }: Props) {
       { facingMode: 'environment' },
       { fps: 10, qrbox: { width: 250, height: 250 } },
       (decodedText) => {
+        if (!isStartedRef.current) return
+        isStartedRef.current = false
         scanner.stop().catch(() => {})
-        onDetected(decodedText)
+        onDetectedRef.current(decodedText)
       },
       undefined
-    ).then(() => setStarted(true))
-      .catch(() => setError('カメラのアクセスが拒否されました'))
+    ).then(() => {
+      isStartedRef.current = true
+    }).catch(() => {
+      setError('カメラのアクセスが拒否されました')
+    })
 
     return () => {
-      scanner.stop().catch(() => {})
+      if (isStartedRef.current) {
+        isStartedRef.current = false
+        scanner.stop().catch(() => {})
+      }
     }
-  }, [onDetected])
+  }, []) // onDetected を依存から外し、refで参照
 
   return (
     <div className="space-y-2">

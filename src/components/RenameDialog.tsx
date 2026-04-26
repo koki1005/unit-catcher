@@ -17,7 +17,7 @@ export default function RenameDialog({ open, initialName, onClose, onSave }: Pro
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="w-[90vw] max-w-sm">
+      <DialogContent className="w-[90vw] max-w-sm" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>名前を変更</DialogTitle>
         </DialogHeader>

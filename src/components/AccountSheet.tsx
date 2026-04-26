@@ -52,7 +52,7 @@ export default function AccountSheet({ open, onClose }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-2xl">
+      <SheetContent side="bottom" className="rounded-t-2xl" aria-describedby={undefined}>
         <SheetHeader>
           <SheetTitle>アカウント</SheetTitle>
         </SheetHeader>

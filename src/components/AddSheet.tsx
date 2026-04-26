@@ -80,7 +80,7 @@ export default function AddSheet({ open, onClose }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={v => !v && handleClose()}>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl overflow-y-auto">
+      <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl overflow-y-auto" aria-describedby={undefined}>
         <SheetHeader>
           <SheetTitle>URLを追加</SheetTitle>
         </SheetHeader>

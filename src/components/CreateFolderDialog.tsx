@@ -48,7 +48,7 @@ export default function CreateFolderDialog({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="w-[90vw] max-w-sm">
+      <DialogContent className="w-[90vw] max-w-sm" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>フォルダを作成</DialogTitle>
         </DialogHeader>
