@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { ChevronRight, ChevronDown, Folder, FolderOpen, Link, Trash2, Pencil } from 'lucide-react'
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Link, Trash2, Pencil, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/store'
 import { Folder as FolderType, UrlItem } from '@/lib/types'
@@ -16,6 +16,16 @@ import {
 } from '@/lib/supabase-storage'
 import RenameDialog from './RenameDialog'
 import { cn } from '@/lib/utils'
+
+async function shareItems(items: UrlItem[]) {
+  const text = items.map(u => `${u.name}\n${u.url}`).join('\n\n')
+  if (navigator.share) {
+    await navigator.share({ title: 'Unit Catcher', text })
+  } else {
+    await navigator.clipboard.writeText(text)
+    alert('クリップボードにコピーしました')
+  }
+}
 
 type Props = {
   parentId: string | null
@@ -76,6 +86,9 @@ function DraggableUrl({ item }: { item: UrlItem }) {
               <span className="text-sm truncate">{item.name}</span>
             </a>
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => shareItems([item])}>
+                <Share2 className="w-3 h-3" />
+              </Button>
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setRenaming(true)}>
                 <Pencil className="w-3 h-3" />
               </Button>
@@ -95,7 +108,18 @@ function DraggableUrl({ item }: { item: UrlItem }) {
 
 // Droppable + Draggable folder
 function DraggableFolder({ folder, depth }: { folder: FolderType; depth: number }) {
-  const { user, folders, setFolders, setUrls, reload, selectMode, selectedIds, toggleSelect } = useApp()
+  const { user, folders, urls, setFolders, setUrls, reload, selectMode, selectedIds, toggleSelect } = useApp()
+
+  const handleShare = () => {
+    const collected: UrlItem[] = []
+    const queue = [folder.id]
+    while (queue.length > 0) {
+      const fid = queue.shift()!
+      urls.filter(u => u.folder_id === fid).forEach(u => collected.push(u))
+      folders.filter(f => f.parent_id === fid).forEach(f => queue.push(f.id))
+    }
+    shareItems(collected)
+  }
   const [open, setOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
 
@@ -157,6 +181,9 @@ function DraggableFolder({ folder, depth }: { folder: FolderType; depth: number 
                 <span className="text-sm font-medium truncate">{folder.name}</span>
               </button>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleShare}>
+                  <Share2 className="w-3 h-3" />
+                </Button>
                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setRenaming(true)}>
                   <Pencil className="w-3 h-3" />
                 </Button>
