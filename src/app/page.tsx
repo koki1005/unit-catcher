@@ -48,7 +48,7 @@ export default function HomePage() {
     useSensor(TouchSensor, { activationConstraint: { distance: 8 } })
   )
 
-  // Pointer over folder → drop into, pointer over root zone → move to root
+  // Pointer over folder → drop into folder; anywhere else → root
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const { active, droppableContainers, droppableRects, pointerCoordinates } = args
     if (!pointerCoordinates) return []
@@ -64,11 +64,7 @@ export default function HomePage() {
     }
 
     const root = droppableContainers.find(c => String(c.id) === 'drop-root')
-    const rootRect = root && droppableRects.get(root.id)
-    if (root && rootRect && inRect(rootRect, pointerCoordinates.x, pointerCoordinates.y)) {
-      return [{ id: root.id, data: root }]
-    }
-
+    if (root) return [{ id: root.id, data: root }]
     return []
   }, [])
 
