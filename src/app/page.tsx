@@ -4,19 +4,18 @@ import { useState, useCallback } from 'react'
 import {
   DndContext, DragEndEvent, DragOverEvent, DragStartEvent,
   MouseSensor, TouchSensor, useSensor, useSensors, useDroppable,
-  closestCenter, ClientRect,
+  ClientRect,
 } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
-import { arrayMove } from '@dnd-kit/sortable'
 import { Plus, FolderPlus, UserCircle2, Link2, CheckSquare, X, Share2, Trash2 } from 'lucide-react'
-import FolderTree, { buildSortedItems } from '@/components/FolderTree'
+import FolderTree from '@/components/FolderTree'
 import AddSheet from '@/components/AddSheet'
 import CreateFolderDialog from '@/components/CreateFolderDialog'
 import AccountSheet from '@/components/AccountSheet'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/store'
-import { moveUrl, moveFolder, getFolders, getUrls, deleteUrls, deleteFolders, reorderItems } from '@/lib/storage'
-import { moveUrlRemote, moveFolderRemote, deleteUrlsRemote, deleteFoldersRemote, reorderItemsRemote } from '@/lib/supabase-storage'
+import { moveUrl, moveFolder, getFolders, getUrls, deleteUrls, deleteFolders } from '@/lib/storage'
+import { moveUrlRemote, moveFolderRemote, deleteUrlsRemote, deleteFoldersRemote } from '@/lib/supabase-storage'
 import { Folder, UrlItem } from '@/lib/types'
 
 function RootDropZone() {
@@ -49,31 +48,28 @@ export default function HomePage() {
     useSensor(TouchSensor, { activationConstraint: { distance: 8 } })
   )
 
-  // Center 40% of folder row → drop into folder, edges → reorder (closestCenter)
+  // Pointer over folder → drop into, pointer over root zone → move to root
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const { active, droppableContainers, droppableRects, pointerCoordinates } = args
+    if (!pointerCoordinates) return []
 
-    if (pointerCoordinates) {
-      for (const container of droppableContainers) {
-        const id = String(container.id)
-        if (!id.startsWith('folder-')) continue
-        if (id === String(active.id)) continue
-
-        const rect = droppableRects.get(container.id)
-        if (!rect) continue
-
-        if (inRect(rect, pointerCoordinates.x, pointerCoordinates.y)) {
-          const relY = (pointerCoordinates.y - rect.top) / rect.height
-          if (relY >= 0.3 && relY <= 0.7) {
-            const folderId = id.replace('folder-', '')
-            const dropContainer = droppableContainers.find(c => c.id === `drop-folder-${folderId}`)
-            if (dropContainer) return [{ id: dropContainer.id, data: dropContainer }]
-          }
-        }
+    for (const container of droppableContainers) {
+      const id = String(container.id)
+      if (!id.startsWith('drop-folder-')) continue
+      if (id === `drop-folder-${String(active.id).replace('folder-', '')}`) continue
+      const rect = droppableRects.get(container.id)
+      if (rect && inRect(rect, pointerCoordinates.x, pointerCoordinates.y)) {
+        return [{ id: container.id, data: container }]
       }
     }
 
-    return closestCenter(args)
+    const root = droppableContainers.find(c => String(c.id) === 'drop-root')
+    const rootRect = root && droppableRects.get(root.id)
+    if (root && rootRect && inRect(rootRect, pointerCoordinates.x, pointerCoordinates.y)) {
+      return [{ id: root.id, data: root }]
+    }
+
+    return []
   }, [])
 
   const handleDragStart = (_e: DragStartEvent) => {
@@ -81,24 +77,8 @@ export default function HomePage() {
   }
 
   const handleDragOver = (e: DragOverEvent) => {
-    const { active, over } = e
-    const overId = String(over?.id ?? '')
+    const overId = String(e.over?.id ?? '')
     setPendingDropFolderId(overId.startsWith('drop-folder-') ? overId.replace('drop-folder-', '') : null)
-
-    // Real-time reorder: update positions as user drags so state matches visual
-    if (!over || active.id === over.id || overId.startsWith('drop-')) return
-    const activeData = active.data.current as { type: string; id: string }
-    const activeItem = activeData.type === 'url' ? urls.find(u => u.id === activeData.id) : folders.find(f => f.id === activeData.id)
-    if (!activeItem) return
-    const parentId = activeData.type === 'url' ? (activeItem as UrlItem).folder_id : (activeItem as Folder).parent_id
-    const levelItems = buildSortedItems(folders, urls, parentId)
-    const oldIndex = levelItems.findIndex(i => i.sortId === String(active.id))
-    const newIndex = levelItems.findIndex(i => i.sortId === String(over.id))
-    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
-    const reordered = arrayMove(levelItems, oldIndex, newIndex)
-    const posMap = new Map(reordered.map((item, idx) => [item.item.id, idx]))
-    setFolders(folders.map(f => posMap.has(f.id) ? { ...f, position: posMap.get(f.id)! } : f))
-    setUrls(urls.map(u => posMap.has(u.id) ? { ...u, position: posMap.get(u.id)! } : u))
   }
 
   const handleDragEnd = async (e: DragEndEvent) => {
@@ -156,28 +136,6 @@ export default function HomePage() {
       return
     }
 
-    // --- Case 3: Reorder ---
-    // State already updated in handleDragOver; just persist to storage
-    if (active.id === over.id) return
-
-    const activeItem = activeData.type === 'url'
-      ? urls.find(u => u.id === activeData.id)
-      : folders.find(f => f.id === activeData.id)
-    if (!activeItem) return
-
-    const parentId = activeData.type === 'url'
-      ? (activeItem as UrlItem).folder_id
-      : (activeItem as Folder).parent_id
-
-    const levelItems = buildSortedItems(folders, urls, parentId)
-    const folderUpdates = levelItems.filter(i => i.type === 'folder').map(i => ({ id: i.item.id, position: i.pos }))
-    const urlUpdates = levelItems.filter(i => i.type === 'url').map(i => ({ id: i.item.id, position: i.pos }))
-
-    if (user) {
-      reorderItemsRemote(folderUpdates, urlUpdates).catch(() => reload())
-    } else {
-      reorderItems(folderUpdates, urlUpdates)
-    }
   }
 
   const collectUrlsFromFolders = (folderIds: string[]): string[] => {
