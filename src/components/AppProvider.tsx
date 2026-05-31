@@ -1,12 +1,30 @@
 'use client'
 
-import { useState, useEffect, useCallback, ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { AppContext } from '@/lib/store'
 import { User, Folder, UrlItem } from '@/lib/types'
 import { getFolders, getUrls } from '@/lib/storage'
 import { getFoldersRemote, getUrlsRemote } from '@/lib/supabase-storage'
 
 const USER_KEY = 'uc_user'
+const foldersCacheKey = (uid: string) => `uc_folders_${uid}`
+const urlsCacheKey = (uid: string) => `uc_urls_${uid}`
+
+function readCache<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem(key)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
+function writeCache(key: string, value: unknown) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(key, JSON.stringify(value))
+}
 
 export default function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
@@ -15,23 +33,39 @@ export default function AppProvider({ children }: { children: ReactNode }) {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [moveMode, setMoveMode] = useState(false)
+  const hydratedUserIdRef = useRef<string | null>(null)
 
   const loadData = useCallback(async (u: User | null) => {
-    if (u) {
-      try {
-        const [f, ul] = await Promise.all([getFoldersRemote(u.id), getUrlsRemote(u.id)])
-        setFolders(f)
-        setUrls(ul)
-      } catch (error) {
-        console.error('Failed to load remote Unit Catcher data', error)
-      }
-    } else {
+    if (!u) {
+      hydratedUserIdRef.current = null
       setFolders(getFolders())
       setUrls(getUrls())
+      return
+    }
+
+    const cachedFolders = readCache<Folder[]>(foldersCacheKey(u.id))
+    const cachedUrls = readCache<UrlItem[]>(urlsCacheKey(u.id))
+    if (cachedFolders) setFolders(cachedFolders)
+    if (cachedUrls) setUrls(cachedUrls)
+    hydratedUserIdRef.current = u.id
+
+    try {
+      const [f, ul] = await Promise.all([getFoldersRemote(u.id), getUrlsRemote(u.id)])
+      setFolders(f)
+      setUrls(ul)
+      writeCache(foldersCacheKey(u.id), f)
+      writeCache(urlsCacheKey(u.id), ul)
+    } catch (error) {
+      console.error('Failed to load remote Unit Catcher data', error)
     }
   }, [])
 
   const setUser = useCallback((u: User | null) => {
+    const prevUserId = hydratedUserIdRef.current
+    if (!u && prevUserId) {
+      localStorage.removeItem(foldersCacheKey(prevUserId))
+      localStorage.removeItem(urlsCacheKey(prevUserId))
+    }
     setUserState(u)
     if (u) {
       localStorage.setItem(USER_KEY, JSON.stringify(u))
@@ -47,6 +81,18 @@ export default function AppProvider({ children }: { children: ReactNode }) {
     setUserState(u)
     loadData(u)
   }, [loadData])
+
+  useEffect(() => {
+    const uid = hydratedUserIdRef.current
+    if (!uid || !user || user.id !== uid) return
+    writeCache(foldersCacheKey(uid), folders)
+  }, [folders, user])
+
+  useEffect(() => {
+    const uid = hydratedUserIdRef.current
+    if (!uid || !user || user.id !== uid) return
+    writeCache(urlsCacheKey(uid), urls)
+  }, [urls, user])
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
