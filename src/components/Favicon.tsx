@@ -15,32 +15,40 @@ function hostnameOf(url: string): string | null {
 export function Favicon({
   url,
   className,
-  fallbackClassName,
+  iconClassName,
   size = 20,
 }: {
   url: string
   className?: string
-  fallbackClassName?: string
+  iconClassName?: string
   size?: number
 }) {
   const [errored, setErrored] = useState(false)
   const host = hostnameOf(url)
 
-  if (!host || errored) {
-    return <LinkIcon className={cn('text-blue-500', fallbackClassName ?? 'w-5 h-5')} />
-  }
-
   return (
-    <img
-      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
-      alt=""
-      width={size}
-      height={size}
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => setErrored(true)}
-      className={cn('rounded-sm object-contain', className)}
-    />
+    <span
+      className={cn(
+        'inline-flex items-center justify-center rounded-full bg-white ring-2 ring-blue-500/60 shadow-sm shrink-0',
+        className,
+      )}
+      style={{ width: size + 12, height: size + 12 }}
+    >
+      {!host || errored ? (
+        <LinkIcon className={cn('text-blue-500', iconClassName)} style={{ width: size, height: size }} />
+      ) : (
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setErrored(true)}
+          className="rounded-sm object-contain"
+        />
+      )}
+    </span>
   )
 }
