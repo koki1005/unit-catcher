@@ -7,6 +7,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { ChevronRight, ChevronDown, Folder, FolderOpen, Trash2, Pencil, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Favicon } from './Favicon'
+import { useImageLuminance, adaptiveTextClasses } from '@/lib/useImageLuminance'
 import { useApp } from '@/lib/store'
 import { Folder as FolderType, UrlItem } from '@/lib/types'
 import {
@@ -102,6 +103,10 @@ function SortableUrl({ item }: { item: UrlItem }) {
   const style = { transform: CSS.Transform.toString(transform), transition }
   const isSelected = selectedIds.has(item.id)
   const bg = bgStyle(item.bg_image_url, item.bg_focal_x, item.bg_focal_y, item.bg_focal_x_pc, item.bg_focal_y_pc, isPc)
+  const luminance = useImageLuminance(item.bg_image_url)
+  const adaptive = adaptiveTextClasses(luminance)
+  const chipText = bg ? adaptive.text : ''
+  const chipBg = bg ? cn(adaptive.bg, adaptive.text) : ''
 
   const handleDelete = async () => {
     if (!confirm(`「${item.name}」を削除しますか？`)) return
@@ -137,15 +142,10 @@ function SortableUrl({ item }: { item: UrlItem }) {
         {selectMode ? (
           <button onClick={() => toggleSelect(item.id)} className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0">
             <input type="checkbox" readOnly checked={isSelected} className="w-5 h-5 shrink-0 accent-primary" />
-            <span className={cn(
-              "shrink-0 inline-flex items-center justify-center",
-              bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
-            )}>
-              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
-            </span>
+            <Favicon url={item.url} size={20} />
             <span className={cn(
               "text-base truncate",
-              bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
+              bg && cn(chipBg, "rounded-full px-3 py-0.5")
             )}>{item.name}</span>
           </button>
         ) : (
@@ -157,7 +157,7 @@ function SortableUrl({ item }: { item: UrlItem }) {
               aria-label={item.name}
               className="absolute inset-0 z-0 rounded-xl"
             />
-            <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 text-muted-foreground/40 hover:text-muted-foreground touch-none shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full ml-0 shadow-sm")}>
+            <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 touch-none shrink-0", bg ? cn(chipBg, "rounded-full ml-0") : "text-muted-foreground/40 hover:text-muted-foreground")}>
               <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
                 <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
                 <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
@@ -165,23 +165,18 @@ function SortableUrl({ item }: { item: UrlItem }) {
               </svg>
             </div>
             <div className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0 self-stretch pointer-events-none">
-              <span className={cn(
-              "shrink-0 inline-flex items-center justify-center",
-              bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
-            )}>
-              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
-            </span>
+              <Favicon url={item.url} size={20} />
               <span className={cn(
                 "text-base truncate",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
+                bg && cn(chipBg, "rounded-full px-3 py-0.5")
               )}>{item.name}</span>
             </div>
-            <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-1 shadow-sm")}>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => shareItems([item])}>
+            <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && cn(chipBg, "rounded-full px-1"))}>
+              <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={() => shareItems([item])}>
                 <Share2 className="w-4 h-4" />
               </Button>
 
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)}>
+              <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={() => setEditing(true)}>
                 <Pencil className="w-4 h-4" />
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={handleDelete}>
@@ -226,6 +221,10 @@ function SortableFolder({ folder, depth }: { folder: FolderType; depth: number }
   const style = { transform: CSS.Transform.toString(transform), transition }
   const isSelected = selectedIds.has(folder.id)
   const bg = bgStyle(folder.bg_image_url, folder.bg_focal_x, folder.bg_focal_y, folder.bg_focal_x_pc, folder.bg_focal_y_pc, isPc)
+  const luminance = useImageLuminance(folder.bg_image_url)
+  const adaptive = adaptiveTextClasses(luminance)
+  const chipText = bg ? adaptive.text : ''
+  const chipBg = bg ? cn(adaptive.bg, adaptive.text) : ''
 
   const handleDelete = async () => {
     if (!confirm(`「${folder.name}」を削除しますか？中のURLも全て削除されます。`)) return
@@ -275,14 +274,14 @@ function SortableFolder({ folder, depth }: { folder: FolderType; depth: number }
             <button onClick={() => toggleSelect(folder.id)} className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0">
               <input type="checkbox" readOnly checked={isSelected} className="w-5 h-5 shrink-0 accent-primary" />
               <span className={cn(
-                "shrink-0 inline-flex items-center justify-center",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
+                "shrink-0 inline-flex items-center justify-center rounded-full p-1.5",
+                bg && chipBg
               )}>
                 {open ? <FolderOpen className="w-5 h-5 text-yellow-500" /> : <Folder className="w-5 h-5 text-yellow-500" />}
               </span>
               <span className={cn(
                 "text-base font-medium truncate",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
+                bg && cn(chipBg, "rounded-full px-3 py-0.5")
               )}>{folder.name}</span>
             </button>
           ) : (
@@ -292,7 +291,7 @@ function SortableFolder({ folder, depth }: { folder: FolderType; depth: number }
                 aria-label={folder.name}
                 className="absolute inset-0 z-0 rounded-xl"
               />
-              <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 text-muted-foreground/40 hover:text-muted-foreground touch-none shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full ml-0 shadow-sm")}>
+              <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 touch-none shrink-0", bg ? cn(chipBg, "rounded-full ml-0") : "text-muted-foreground/40 hover:text-muted-foreground")}>
                 <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
                   <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
                   <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
@@ -301,28 +300,28 @@ function SortableFolder({ folder, depth }: { folder: FolderType; depth: number }
               </div>
               <div className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0 self-stretch pointer-events-none">
                 <span className={cn(
-                  "shrink-0 inline-flex items-center justify-center",
-                  bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1 shadow-sm"
+                  "shrink-0 inline-flex items-center justify-center rounded-full p-1",
+                  bg ? chipBg : "text-muted-foreground"
                 )}>
-                  {open ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                  {open ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                 </span>
                 <span className={cn(
-                "shrink-0 inline-flex items-center justify-center",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
-              )}>
-                {open ? <FolderOpen className="w-5 h-5 text-yellow-500" /> : <Folder className="w-5 h-5 text-yellow-500" />}
-              </span>
+                  "shrink-0 inline-flex items-center justify-center rounded-full p-1.5",
+                  bg && chipBg
+                )}>
+                  {open ? <FolderOpen className="w-5 h-5 text-yellow-500" /> : <Folder className="w-5 h-5 text-yellow-500" />}
+                </span>
                 <span className={cn(
-                "text-base font-medium truncate",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
-              )}>{folder.name}</span>
+                  "text-base font-medium truncate",
+                  bg && cn(chipBg, "rounded-full px-3 py-0.5")
+                )}>{folder.name}</span>
               </div>
-              <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-1 shadow-sm")}>
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleShare}>
+              <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && cn(chipBg, "rounded-full px-1"))}>
+                <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={handleShare}>
                   <Share2 className="w-4 h-4" />
                 </Button>
 
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)}>
+                <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={() => setEditing(true)}>
                   <Pencil className="w-4 h-4" />
                 </Button>
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={handleDelete}>
@@ -369,6 +368,10 @@ function DraggableUrl({ item }: { item: UrlItem }) {
 
   const isSelected = selectedIds.has(item.id)
   const bg = bgStyle(item.bg_image_url, item.bg_focal_x, item.bg_focal_y, item.bg_focal_x_pc, item.bg_focal_y_pc, isPc)
+  const luminance = useImageLuminance(item.bg_image_url)
+  const adaptive = adaptiveTextClasses(luminance)
+  const chipText = bg ? adaptive.text : ''
+  const chipBg = bg ? cn(adaptive.bg, adaptive.text) : ''
 
   const handleDelete = async () => {
     if (!confirm(`「${item.name}」を削除しますか？`)) return
@@ -404,15 +407,10 @@ function DraggableUrl({ item }: { item: UrlItem }) {
         {selectMode ? (
           <button onClick={() => toggleSelect(item.id)} className="flex items-center gap-1.5 flex-1 min-w-0">
             <input type="checkbox" readOnly checked={isSelected} className="w-5 h-5 shrink-0 accent-primary" />
-            <span className={cn(
-              "shrink-0 inline-flex items-center justify-center",
-              bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
-            )}>
-              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
-            </span>
+            <Favicon url={item.url} size={20} />
             <span className={cn(
               "text-base truncate",
-              bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
+              bg && cn(chipBg, "rounded-full px-3 py-0.5")
             )}>{item.name}</span>
           </button>
         ) : (
@@ -424,7 +422,7 @@ function DraggableUrl({ item }: { item: UrlItem }) {
               aria-label={item.name}
               className="absolute inset-0 z-0 rounded-xl"
             />
-            <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 text-muted-foreground/40 hover:text-muted-foreground touch-none shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full ml-0 shadow-sm")}>
+            <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 touch-none shrink-0", bg ? cn(chipBg, "rounded-full ml-0") : "text-muted-foreground/40 hover:text-muted-foreground")}>
               <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
                 <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
                 <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
@@ -432,23 +430,18 @@ function DraggableUrl({ item }: { item: UrlItem }) {
               </svg>
             </div>
             <div className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0 self-stretch pointer-events-none">
-              <span className={cn(
-              "shrink-0 inline-flex items-center justify-center",
-              bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
-            )}>
-              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
-            </span>
+              <Favicon url={item.url} size={20} />
               <span className={cn(
                 "text-base truncate",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
+                bg && cn(chipBg, "rounded-full px-3 py-0.5")
               )}>{item.name}</span>
             </div>
-            <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-1 shadow-sm")}>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => shareItems([item])}>
+            <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && cn(chipBg, "rounded-full px-1"))}>
+              <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={() => shareItems([item])}>
                 <Share2 className="w-4 h-4" />
               </Button>
 
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)}>
+              <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={() => setEditing(true)}>
                 <Pencil className="w-4 h-4" />
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={handleDelete}>
@@ -498,6 +491,10 @@ function DraggableFolder({ folder, depth }: { folder: FolderType; depth: number 
   const setNodeRef = (node: HTMLElement | null) => { setDragRef(node); setDropRef(node) }
   const isSelected = selectedIds.has(folder.id)
   const bg = bgStyle(folder.bg_image_url, folder.bg_focal_x, folder.bg_focal_y, folder.bg_focal_x_pc, folder.bg_focal_y_pc, isPc)
+  const luminance = useImageLuminance(folder.bg_image_url)
+  const adaptive = adaptiveTextClasses(luminance)
+  const chipText = bg ? adaptive.text : ''
+  const chipBg = bg ? cn(adaptive.bg, adaptive.text) : ''
 
   const handleDelete = async () => {
     if (!confirm(`「${folder.name}」を削除しますか？中のURLも全て削除されます。`)) return
@@ -547,14 +544,14 @@ function DraggableFolder({ folder, depth }: { folder: FolderType; depth: number 
             <button onClick={() => toggleSelect(folder.id)} className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0">
               <input type="checkbox" readOnly checked={isSelected} className="w-5 h-5 shrink-0 accent-primary" />
               <span className={cn(
-                "shrink-0 inline-flex items-center justify-center",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
+                "shrink-0 inline-flex items-center justify-center rounded-full p-1.5",
+                bg && chipBg
               )}>
                 {open ? <FolderOpen className="w-5 h-5 text-yellow-500" /> : <Folder className="w-5 h-5 text-yellow-500" />}
               </span>
               <span className={cn(
                 "text-base font-medium truncate",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
+                bg && cn(chipBg, "rounded-full px-3 py-0.5")
               )}>{folder.name}</span>
             </button>
           ) : (
@@ -564,7 +561,7 @@ function DraggableFolder({ folder, depth }: { folder: FolderType; depth: number 
                 aria-label={folder.name}
                 className="absolute inset-0 z-0 rounded-xl"
               />
-              <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 text-muted-foreground/40 hover:text-muted-foreground touch-none shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full ml-0 shadow-sm")}>
+              <div {...listeners} {...attributes} className={cn("relative z-10 cursor-grab active:cursor-grabbing p-1 -ml-1 touch-none shrink-0", bg ? cn(chipBg, "rounded-full ml-0") : "text-muted-foreground/40 hover:text-muted-foreground")}>
                 <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
                   <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
                   <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
@@ -573,28 +570,28 @@ function DraggableFolder({ folder, depth }: { folder: FolderType; depth: number 
               </div>
               <div className="relative z-10 flex items-center gap-1.5 flex-1 min-w-0 self-stretch pointer-events-none">
                 <span className={cn(
-                  "shrink-0 inline-flex items-center justify-center",
-                  bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1 shadow-sm"
+                  "shrink-0 inline-flex items-center justify-center rounded-full p-1",
+                  bg ? chipBg : "text-muted-foreground"
                 )}>
-                  {open ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                  {open ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                 </span>
                 <span className={cn(
-                "shrink-0 inline-flex items-center justify-center",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
-              )}>
-                {open ? <FolderOpen className="w-5 h-5 text-yellow-500" /> : <Folder className="w-5 h-5 text-yellow-500" />}
-              </span>
+                  "shrink-0 inline-flex items-center justify-center rounded-full p-1.5",
+                  bg && chipBg
+                )}>
+                  {open ? <FolderOpen className="w-5 h-5 text-yellow-500" /> : <Folder className="w-5 h-5 text-yellow-500" />}
+                </span>
                 <span className={cn(
-                "text-base font-medium truncate",
-                bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-3 py-0.5 shadow-sm"
-              )}>{folder.name}</span>
+                  "text-base font-medium truncate",
+                  bg && cn(chipBg, "rounded-full px-3 py-0.5")
+                )}>{folder.name}</span>
               </div>
-              <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full px-1 shadow-sm")}>
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleShare}>
+              <div className={cn("relative z-10 flex items-center gap-0.5 shrink-0", bg && cn(chipBg, "rounded-full px-1"))}>
+                <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={handleShare}>
                   <Share2 className="w-4 h-4" />
                 </Button>
 
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)}>
+                <Button size="icon" variant="ghost" className={cn("h-8 w-8", bg && chipText)} onClick={() => setEditing(true)}>
                   <Pencil className="w-4 h-4" />
                 </Button>
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={handleDelete}>
