@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { ChevronRight, ChevronDown, Folder, FolderOpen, Link, Trash2, Pencil, Share2 } from 'lucide-react'
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Trash2, Pencil, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Favicon } from './Favicon'
 import { useApp } from '@/lib/store'
 import { Folder as FolderType, UrlItem } from '@/lib/types'
 import {
@@ -140,7 +141,7 @@ function SortableUrl({ item }: { item: UrlItem }) {
               "shrink-0 inline-flex items-center justify-center",
               bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
             )}>
-              <Link className="w-5 h-5 text-blue-500" />
+              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
             </span>
             <span className={cn(
               "text-base truncate",
@@ -168,7 +169,7 @@ function SortableUrl({ item }: { item: UrlItem }) {
               "shrink-0 inline-flex items-center justify-center",
               bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
             )}>
-              <Link className="w-5 h-5 text-blue-500" />
+              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
             </span>
               <span className={cn(
                 "text-base truncate",
@@ -407,7 +408,7 @@ function DraggableUrl({ item }: { item: UrlItem }) {
               "shrink-0 inline-flex items-center justify-center",
               bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
             )}>
-              <Link className="w-5 h-5 text-blue-500" />
+              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
             </span>
             <span className={cn(
               "text-base truncate",
@@ -435,7 +436,7 @@ function DraggableUrl({ item }: { item: UrlItem }) {
               "shrink-0 inline-flex items-center justify-center",
               bg && "bg-white/25 backdrop-blur-md backdrop-saturate-150 rounded-full p-1.5 shadow-sm"
             )}>
-              <Link className="w-5 h-5 text-blue-500" />
+              <Favicon url={item.url} className="w-5 h-5" fallbackClassName="w-5 h-5" />
             </span>
               <span className={cn(
                 "text-base truncate",
